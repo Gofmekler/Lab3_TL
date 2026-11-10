@@ -2,82 +2,52 @@
 
 Проект рассчитан на команду из трёх человек; слои MVVM разделены так,
 чтобы каждый мог работать независимо, договорившись только об интерфейсах.
+Правила веток, review и Definition of Done — в [CONTRIBUTING.md](../CONTRIBUTING.md),
+автоматическое назначение ревьюеров — `.github/CODEOWNERS`.
 
-## Участники
+## Тимлид (интеграция)
 
-Заполните перед защитой: каждый участник коммитит **со своего GitHub-аккаунта**,
-иначе вклад не виден в истории и в списке contributors.
+- архитектура и структура репозитория, точка входа `run.py`, конфигурации PyCharm;
+- контракты между слоями: `SimulationParameters`, `Snapshot`, `state()`,
+  HTTP API ([API.md](API.md)), формат экспорта;
+- CI (`.github/workflows/ci.yml`), документация, лицензия;
+- десктопная сборка (`desktop.py`, `build_desktop.py`, `.github/workflows/desktop.yml`);
+- review PR обеих ролей, финальный PR `development → main`.
 
-| Роль | Участник | GitHub |
-|---|---|---|
-| Тимлид | _ФИО_ | `@login` |
-| Core (Model) | _ФИО_ | `@login` |
-| UI (ViewModel + View) | _ФИО_ | `@login` |
-
-## Тимлид
-
-- архитектура и структура репозитория, точка входа `run.py`;
-- контракты между слоями: `SimulationParameters`, `Snapshot`,
-  формат `state()`, HTTP API ([API.md](API.md)). Код, реализующий
-  контракты, пишут Core и UI; тимлид их фиксирует в документации
-  и согласует изменения;
-- документация (`README.md`, `docs/`), зависимости, CI, шаблон PR;
-- десктопная сборка (`desktop.py`, `build_desktop.py`);
-- ревью и слияние PR, сборка релиза.
-
-Файлы: `README.md`, `CONTRIBUTING.md`, `.gitignore`, `requirements*.txt`,
-`run.py`, `desktop.py`, `build_desktop.py`, `lj_md/__init__.py`, `docs/*`,
-`.github/*`, `.idea/runConfigurations/*`.
-
-## Core (Model)
+## Core (Model + верификация)
 
 - `lj_md/core/` целиком: потенциал, силы, граничные условия, интегратор,
-  термостаты, наблюдаемые (T, P, g(r));
-- физическая валидация параметров (`SimulationParameters.validate`);
-- верификация: законы сохранения и эталонные случаи ([VERIFICATION.md](VERIFICATION.md)).
+  термостаты, наблюдаемые (T, P, g(r)), единицы;
+- физическая валидация параметров (`SimulationParameters.validate`),
+  обнаружение неустойчивости и откат;
+- верификация: `tests/test_core.py`, `tests/test_verification.py`,
+  `verification/` и отчёт [VERIFICATION.md](VERIFICATION.md).
 
-Файлы: `lj_md/core/*`, `tests/test_core.py`, `tests/test_verification.py`.
+## UI (ViewModel + View + экспорт изображений)
 
-## UI (ViewModel + View)
+UI отвечает за весь путь «данные ядра → экран»: решает, какие данные нужны
+интерфейсу и в каком виде, и сам их готовит.
 
-UI отвечает за весь путь «данные ядра → экран»: решает, какие данные
-нужны интерфейсу и в каком виде, и сам их готовит.
-
-- ViewModel (`lj_md/viewmodel/`): наблюдаемые свойства и команды,
-  разбор и валидация ввода, ошибки по полям, схема формы, пресеты,
-  подготовка данных для графиков, экспорт CSV/JSON;
+- ViewModel (`lj_md/viewmodel/`): фазы и команды, разбор и валидация ввода,
+  схема формы, пресеты, подготовка данных для графиков, экспорт/импорт CSV/JSON;
 - `lj_md/view/`: Flask-маршруты, HTML, CSS, JS;
-- отрисовка ячейки (2D, 3D с вращением), графики, форма параметров;
-- привязка `data-bind` / `data-command`, адаптивная вёрстка, тёмная тема;
-- сообщения об ошибках — в интерфейсе, без `alert()`.
+- отрисовка ячейки (2D, 3D с вращением), графики с подписями осей и единицами,
+  форма параметров по схеме, PNG-экспорт, импорт файла эксперимента;
+- обработка ошибок связи и кодов ответа, адаптивная вёрстка, тёмная тема;
+- `tests/test_viewmodel.py`, `tests/test_web.py`, `tests/e2e/`, скриншоты (`scripts/make_screenshots.py`).
 
-Файлы: `lj_md/viewmodel/*`, `lj_md/view/*` (вкл. `templates/`, `static/`),
-`tests/test_viewmodel.py`, `tests/test_web.py`.
+## Контракты (о чём договариваются заранее)
 
-## Контракты (то, о чём договариваются заранее)
-
-| Между | Контракт | Где описан |
+| Между | Контракт | Где закреплён |
 |---|---|---|
-| Core ↔ UI (ViewModel) | `Simulation`, `SimulationParameters`, `Snapshot`, `SimulationError` | [ARCHITECTURE.md](ARCHITECTURE.md#model-lj_mdcore) |
-| ViewModel ↔ View (внутри UI) | `state()` (JSON), имена команд, `schema()` полей формы, маршруты | [API.md](API.md) |
+| Core ↔ UI (ViewModel) | `Simulation`, `SimulationParameters`, `Snapshot`, `SimulationError` | `tests/test_core.py`, `tests/test_viewmodel.py` |
+| ViewModel ↔ View (внутри UI) | `state()`, имена команд, `schema()`, коды ошибок | `docs/API.md`, `tests/test_web.py` |
+| Экспорт | CSV/JSON, `schema_version` | `docs/API.md`, `tests/test_viewmodel.py` |
 
-Главный межличностный контракт — между Core и UI: именно его тимлид
-фиксирует заранее, чтобы оба могли работать параллельно.
+## Порядок работы
 
-## Порядок работы и слияния
-
-Зависимости слоёв: `view → viewmodel → core`. Разрабатывать можно
-параллельно, но **сливать в `main` — в порядке зависимостей**, чтобы после
-каждого слияния проект собирался и тесты проходили:
-
-1. **Тимлид** — каркас, контракты, документация.
-2. **Core** — физика и её тесты (ни от чего не зависит).
-3. **UI** — ViewModel (импортирует core). До слияния core UI может
-   писать ViewModel и её тесты на заглушке `Simulation` по контракту.
-4. **UI** — веб-интерфейс (импортирует ViewModel). Шаги 3 и 4 — отдельные
-   PR: так ревью проще, а история показывает порядок слоёв.
-5. **Тимлид** — интеграция, конфигурации запуска, CI, десктопная сборка,
-   финальная документация.
-
-Каждый шаг — отдельная ветка и pull request с ревью; правила — в
-[CONTRIBUTING.md](../CONTRIBUTING.md).
+1. Тимлид — каркас, контракты, документация, CI.
+2. Core и UI работают параллельно в `feature/*`: UI может начинать с
+   зафиксированного формата `state()`.
+3. PR в `development` с review участника другой роли; тимлид интегрирует.
+4. Перед защитой — чек-лист в CONTRIBUTING.md и финальный PR в `main`.
