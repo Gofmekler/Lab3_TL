@@ -1,0 +1,15 @@
+# Ответственные за слои: PR, затрагивающий файлы, автоматически запрашивает их review.
+# Замените логины на GitHub-логины участников соответствующих ролей (см. docs/ROLES.md).
+
+# Тимлид: интеграция, контракты, ViewModel, документация, CI
+*                       @gofmekler
+
+# Core: физическое ядро и его верификация
+/lj_md/core/            @gofmekler
+/verification/          @gofmekler
+/tests/test_core.py     @gofmekler
+
+# UI: веб-интерфейс
+/lj_md/view/            @gofmekler
+/tests/test_web.py      @gofmekler
+/tests/e2e/             @gofmekler
