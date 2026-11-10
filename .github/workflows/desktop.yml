@@ -1,0 +1,44 @@
+# Сборка десктопной версии (один файл) под все ОС. Подробности: docs/DESKTOP.md
+name: Desktop build
+
+on:
+  workflow_dispatch:        # вручную: Actions → Desktop build → Run workflow
+  push:
+    tags: ["v*"]            # по тегу v1.0 и т.п. — файлы прикрепляются к релизу
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, macos-15-intel, windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements-build.txt
+
+      - name: Tests
+        run: python -m pytest -q
+
+      - name: Build
+        run: python build_desktop.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LJ_MD-${{ matrix.os }}
+          path: dist/*
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
