@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MD: атомы в ячейке (LJ)</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header class="topbar">
+  <div>
+    <h1>Молекулярная динамика: атомы в ячейке</h1>
+    <p class="subtitle">Потенциал Леннард-Джонса · интегратор Верле · приведённые единицы (σ = ε = m = k<sub>B</sub> = 1)</p>
+  </div>
+  <div class="status" data-bind-status></div>
+</header>
+
+<main class="layout">
+  <!-- Панель параметров: поля строятся по схеме из ViewModel -->
+  <aside class="panel params">
+    <h2>Параметры</h2>
+    <div class="presets" id="presets"></div>
+    <form id="params-form" novalidate>
+      <div id="fields"></div>
+      <button type="submit" class="btn primary wide">Применить и пересоздать</button>
+      <p class="note">Поля с меткой <span class="live-tag">live</span> применяются сразу, без перезапуска.</p>
+    </form>
+  </aside>
+
+  <section class="panel scene">
+    <div class="toolbar">
+      <button class="btn primary" data-command="start">▶ Старт</button>
+      <button class="btn" data-command="pause">⏸ Пауза</button>
+      <button class="btn" data-command="step">⏭ Кадр</button>
+      <button class="btn" data-command="reset">↺ Сброс</button>
+      <a class="btn ghost" href="/api/export.csv" title="История E, T, P по шагам">⬇ CSV</a>
+      <a class="btn ghost" href="/api/export.json" title="Параметры, итоги, история и g(r)">⬇ JSON</a>
+    </div>
+    <div class="canvas-wrap">
+      <canvas id="scene" width="640" height="640"></canvas>
+      <div class="legend-speed"><span>медленные</span><i></i><span>быстрые</span></div>
+      <p class="hint" id="scene-hint"></p>
+    </div>
+  </section>
+
+  <section class="panel stats">
+    <h2>Наблюдаемые</h2>
+    <div class="tiles">
+      <div class="tile"><span>Шаг</span><b data-bind="display.step"></b></div>
+      <div class="tile"><span>Время t</span><b data-bind="display.time"></b></div>
+      <div class="tile"><span>Температура T</span><b data-bind="display.temperature"></b></div>
+      <div class="tile"><span>Давление P</span><b data-bind="display.pressure"></b></div>
+      <div class="tile"><span>E<sub>kin</sub> / N</span><b data-bind="display.kinetic_per_atom"></b></div>
+      <div class="tile"><span>E<sub>pot</sub> / N</span><b data-bind="display.potential_per_atom"></b></div>
+      <div class="tile"><span>E / N</span><b data-bind="display.total_per_atom"></b></div>
+      <div class="tile"><span>Дрейф E</span><b data-bind="display.energy_drift"></b></div>
+      <div class="tile"><span>N</span><b data-bind="display.n"></b></div>
+      <div class="tile"><span>Плотность ρ</span><b data-bind="display.density"></b></div>
+      <div class="tile"><span>Ребро ячейки L</span><b data-bind="display.box"></b></div>
+    </div>
+  </section>
+
+  <section class="panel charts">
+    <figure><figcaption>Энергия на атом</figcaption><canvas id="chart-energy" height="200"></canvas></figure>
+    <figure><figcaption>Температура</figcaption><canvas id="chart-temperature" height="200"></canvas></figure>
+    <figure><figcaption>Давление</figcaption><canvas id="chart-pressure" height="200"></canvas></figure>
+    <figure><figcaption>Радиальная функция распределения g(r) <small id="rdf-samples"></small></figcaption><canvas id="chart-rdf" height="200"></canvas></figure>
+  </section>
+</main>
+
+<script src="{{ url_for('static', filename='charts.js') }}"></script>
+<script src="{{ url_for('static', filename='scene.js') }}"></script>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
