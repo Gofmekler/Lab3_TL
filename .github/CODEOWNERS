@@ -5,11 +5,11 @@
 *                       @gofmekler
 
 # Core: физическое ядро и его верификация
-/lj_md/core/            @gofmekler
-/verification/          @gofmekler
-/tests/test_core.py     @gofmekler
+/lj_md/core/            @NikitosikObdolbosik
+/verification/          @NikitosikObdolbosik
+/tests/test_core.py     @NikitosikObdolbosik
 
 # UI: веб-интерфейс
-/lj_md/view/            @gofmekler
-/tests/test_web.py      @gofmekler
-/tests/e2e/             @gofmekler
+/lj_md/view/            @SanSEllo
+/tests/test_web.py      @SanSEllo
+/tests/e2e/             @SanSEllo
