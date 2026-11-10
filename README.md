@@ -1,6 +1,6 @@
 # Lab3TL_LJ — MD: атомы в ячейке (потенциал Леннард-Джонса)
 
-[![tests](https://github.com/Gofmekler/Lab3TL_LJ/actions/workflows/tests.yml/badge.svg)](https://github.com/Gofmekler/Lab3TL_LJ/actions/workflows/tests.yml)
+[![tests](https://github.com/Gofmekler/Lab3_TL/actions/workflows/tests.yml/badge.svg)](https://github.com/Gofmekler/Lab3_TL/actions/workflows/tests.yml)
 
 Веб-приложение для моделирования движения атомов в ячейке методом
 молекулярной динамики. Атомы взаимодействуют по потенциалу Леннард-Джонса,
