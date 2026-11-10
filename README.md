@@ -1,24 +1,32 @@
 # Lab3TL_LJ — MD: атомы в ячейке (потенциал Леннард-Джонса)
 
-[![tests](https://github.com/Gofmekler/Lab3_TL/actions/workflows/tests.yml/badge.svg)](https://github.com/Gofmekler/Lab3_TL/actions/workflows/tests.yml)
+[![CI](https://github.com/Gofmekler/Lab3_TL/actions/workflows/ci.yml/badge.svg)](https://github.com/Gofmekler/Lab3_TL/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Веб-приложение для моделирования движения атомов в ячейке методом
-молекулярной динамики. Атомы взаимодействуют по потенциалу Леннард-Джонса,
-уравнения движения интегрируются схемой Верле. Архитектура — **MVVM**.
+Веб-приложение для вычислительного эксперимента: движение атомов в ячейке
+методом молекулярной динамики. Атомы взаимодействуют по потенциалу
+Леннард-Джонса, уравнения движения интегрируются схемой Верле.
+Архитектура — **MVVM** (Core → ViewModel → View), ядро верифицировано
+по независимым эталонам ([docs/VERIFICATION.md](docs/VERIFICATION.md)).
+
+![Интерфейс: жидкость в 2D](docs/img/ui_liquid_2d.png)
 
 ## Возможности
 
 - 2D и 3D (в 3D ячейку можно вращать мышью);
 - периодические граничные условия или отражающие стенки;
-- ансамбль NVE (без термостата) или NVT (термостат Берендсена / масштабирование скоростей);
+- NVE (без термостата) или NVT (Берендсен / масштабирование скоростей);
+- длительность эксперимента t<sub>max</sub> и явные фазы: готово, идёт, пауза,
+  завершено, сбой расчёта (данные до сбоя сохраняются);
 - пресеты «Газ», «Жидкость», «Кристалл»;
-- графики энергии (E<sub>kin</sub>, E<sub>pot</sub>, E), температуры, давления;
-- функция радиального распределения g(r), усреднённая по времени;
+- графики энергии, температуры, давления и g(r) с подписями осей и единицами;
+- давление двумя способами: по теореме вириала и по ударам о стенки;
+- значения в приведённых единицах и в единицах аргона (K, пс, МПа);
 - контроль сохранения энергии (дрейф E в NVE);
-- выгрузка истории наблюдаемых в CSV и полного отчёта в JSON (параметры, итоги,
-  история, g(r)) — по JSON эксперимент воспроизводится заново;
-- верификация по эталонным аналитическим случаям и законам сохранения
-  ([docs/VERIFICATION.md](docs/VERIFICATION.md)).
+- экспорт: CSV (с метаданными и единицами), JSON (эксперимент целиком), PNG
+  сцены и каждого графика; повтор эксперимента из JSON;
+- проверка ввода у каждого поля, понятные сообщения об ошибках и о
+  недоступности сервера; панель «Ограничения модели».
 
 ## Запуск в PyCharm (macOS)
 
@@ -41,6 +49,8 @@
    и нажмите зелёный ▶ (⌃R). Браузер откроется сам на
    <http://127.0.0.1:8000>. Остановка — красный квадрат (⌘F2).
 6. **Тесты.** Конфигурация **«Тесты»** → ▶.
+7. **Отчёт о верификации** (нужны `pip install -r requirements-dev.txt`):
+   конфигурация **«Верификация»** → ▶, результат — `docs/VERIFICATION.md`.
 
 Конфигурации запуска лежат в `.idea/runConfigurations/` и подхватываются
 автоматически. Если их не видно в списке — откройте `run.py` и нажмите ▶
@@ -54,6 +64,7 @@
 | `Порт 8000 занят` | приложение уже запущено — остановите старый запуск (⌘F2) или добавьте `--port 8001` в *Edit Configurations… → Parameters* |
 | `No Python interpreter configured` | шаг 3 |
 | Браузер не открылся | откройте вручную <http://127.0.0.1:8000> (ссылка кликабельна в консоли PyCharm) |
+| В интерфейсе «Сервер недоступен» | приложение остановлено — запустите снова (шаг 5) и обновите страницу |
 
 Порт по умолчанию — 8000: на macOS 12+ порт 5000 занят службой AirPlay Receiver.
 
@@ -61,11 +72,35 @@
 
 ```bash
 python3 -m venv .venv
-source .venv/bin/activate            # Windows: .venv\Scripts\activate
+source .venv/bin/activate              # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-python run.py                        # откроется http://127.0.0.1:8000
-python -m pytest                     # тесты
+python run.py                          # откроется http://127.0.0.1:8000
 ```
+
+## Тесты и верификация
+
+```bash
+python -m pytest                       # unit, эталоны, контракт API (~30 с)
+
+pip install -r requirements-dev.txt    # инструменты разработчика
+python -m playwright install chromium
+python -m pytest -m e2e                # сквозные тесты в браузере
+ruff check .                           # линтер
+python -m verification                 # полный отчёт → docs/VERIFICATION.md (~3 мин)
+python scripts/make_screenshots.py     # скриншоты → docs/img/ui_*.png
+```
+
+Всё это выполняется в CI на каждый push и pull request
+([.github/workflows/ci.yml](.github/workflows/ci.yml)): Linux и macOS,
+Python 3.10 и 3.13, плюс запуск приложения и браузерные тесты.
+
+| Уровень | Что проверяется |
+|---|---|
+| Core | законы сохранения энергии и импульса, F = −∇U, обратимость, PBC и стенки |
+| Эталоны | период колебаний молекулы, точка поворота, порядок схемы = 2, P(вириал) = P(стенки), Z = 1 + B₂ρ, распределение Максвелла |
+| ViewModel | фазы, команды, валидация (ошибочный ввод не заменяется умолчанием), экспорт/импорт |
+| HTTP | контракт `state()`, коды 400/404/405/409/413/422/500, лимиты, изоляция сессий |
+| Браузер | страница → HTTP → ViewModel → Core, PNG/CSV/JSON, «сервер недоступен» |
 
 ## Структура
 
@@ -73,37 +108,39 @@ python -m pytest                     # тесты
 lj_md/
   core/                  # MODEL — физика, ничего не знает об интерфейсе
     potential.py         #   потенциал LJ (обрезка + сдвиг), сила
-    system.py            #   частицы, ячейка, PBC/стенки, силы, T, KE
+    system.py            #   частицы, ячейка, PBC/стенки, силы, T, KE, импульс стенкам
     integrator.py        #   velocity Verlet
     thermostat.py        #   Берендсен, rescale
     observables.py       #   давление (вириал), g(r)
-    simulation.py        #   фасад: параметры, инициализация, шаги, история
+    simulation.py        #   фасад: параметры, инициализация, шаги, t_max, откат при сбое
+    units.py             #   пересчёт в единицы аргона
   viewmodel/             # VIEWMODEL — состояние экрана и команды
     observable.py        #   ObservableProperty, Command (аналог INotifyPropertyChanged)
-    simulation_vm.py     #   SimulationViewModel: валидация, команды, данные для графиков
+    simulation_vm.py     #   фазы, валидация, команды, данные для графиков, экспорт
   view/                  # VIEW — веб-интерфейс
-    app.py               #   Flask: тонкие маршруты к ViewModel
+    app.py               #   Flask: тонкие маршруты к ViewModel, коды ошибок, лимиты
     templates/index.html #   разметка с data-bind / data-command
     static/app.js        #   привязка DOM ↔ состояние ViewModel
     static/scene.js      #   отрисовка атомов (2D/3D)
-    static/charts.js     #   графики на canvas
-tests/
-  test_core.py           # законы сохранения, силы, границы, термостаты
-  test_verification.py   # эталонные случаи с аналитическим ответом
-  test_viewmodel.py      # команды, валидация, контракт state(), экспорт
-  test_web.py            # HTTP-маршруты
-docs/                    # архитектура, API, верификация, роли, теория, аудит
-.github/                 # CI (тесты на 3 ОС) и шаблон pull request
+    static/charts.js     #   графики на canvas, PNG
+verification/            # эталонные проверки и генератор docs/VERIFICATION.md
+tests/                   # тесты по слоям + e2e в браузере
+scripts/                 # скриншоты для документации
+docs/                    # архитектура, API, роли, теория, верификация, отчёт
 run.py                   # точка входа
 ```
 
 ## Документация
 
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — как устроен MVVM в проекте и почему так;
-- [docs/API.md](docs/API.md) — HTTP API: маршруты, формат `state()`, ошибки, экспорт;
-- [docs/THEORY.md](docs/THEORY.md) — физическая модель и численные методы;
-- [docs/VERIFICATION.md](docs/VERIFICATION.md) — как проверяется правильность расчёта;
-- [docs/ROLES.md](docs/ROLES.md) — участники и зоны ответственности, порядок слияния;
-- [docs/DESKTOP.md](docs/DESKTOP.md) — сборка в один исполняемый файл, чтобы отправить приложение без установки Python;
-- [CONTRIBUTING.md](CONTRIBUTING.md) — ветки, pull request, Definition of Done;
-- [docs/AUDIT.md](docs/AUDIT.md) — самоаудит по требованиям курса и задачи до защиты.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — как устроен MVVM и почему так;
+- [docs/API.md](docs/API.md) — контракт View ↔ ViewModel, коды ошибок, форматы экспорта;
+- [docs/THEORY.md](docs/THEORY.md) — физическая модель, численные методы, ограничения;
+- [docs/VERIFICATION.md](docs/VERIFICATION.md) — результаты эталонных проверок;
+- [docs/REPORT.md](docs/REPORT.md) — черновик отчёта по лабораторной;
+- [docs/ROLES.md](docs/ROLES.md) и [CONTRIBUTING.md](CONTRIBUTING.md) — роли, ветки, review, Definition of Done;
+- [docs/AUDIT_CHECKLIST.md](docs/AUDIT_CHECKLIST.md) — самопроверка по критериям курса;
+- [docs/DESKTOP.md](docs/DESKTOP.md) — сборка в один исполняемый файл, чтобы отправить приложение без установки Python.
+
+## Лицензия
+
+[MIT](LICENSE).

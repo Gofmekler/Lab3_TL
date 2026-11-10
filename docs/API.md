@@ -1,134 +1,121 @@
-# HTTP API (контракт ViewModel ↔ UI)
+# HTTP API (контракт View ↔ ViewModel)
 
-Сервер — `lj_md/view/app.py`. Каждый маршрут вызывает один метод
-`SimulationViewModel` и почти всегда возвращает её `state()` в JSON.
-Логики в маршрутах нет: валидация, ошибки и тексты статуса формируются во ViewModel.
+Единственный источник данных для интерфейса — `SimulationViewModel.state()`.
+Сервер (`lj_md/view/app.py`) не содержит логики: каждый маршрут вызывает
+один метод ViewModel и возвращает её состояние. Контракт закреплён тестами
+`tests/test_web.py` (`assert_state_contract`) — изменение формата без
+обновления этого документа и тестов роняет CI.
 
-Базовый адрес при локальном запуске: `http://127.0.0.1:8000`.
-
-## Сессии
-
-У каждого браузера своя симуляция. При первом запросе сервер выдаёт cookie
-`lj_md_session` (`HttpOnly`, `SameSite=Lax`); по ней находится ViewModel
-(`ViewModelRegistry`, не более 32 сессий, самые старые вытесняются).
-Состояние хранится в памяти процесса, поэтому сервер запускается **одним
-процессом** (для gunicorn: `-w 1 --threads N`).
-
-**CORS не нужен и не включён:** страница и API отдаются одним сервером
-(один origin). Сторонние сайты обращаться к API не должны.
+Сессия: cookie `lj_md_session` (httponly, SameSite=Lax); у каждой сессии
+своя ViewModel (до 32 сессий, старые вытесняются). Сервер по умолчанию
+слушает только `127.0.0.1`.
 
 ## Маршруты
 
-| Метод и путь | Тело запроса | Ответ | Метод ViewModel |
+| Метод | Путь | Действие ViewModel | Успех |
 |---|---|---|---|
-| `GET /` | — | HTML-страница | — |
-| `GET /api/schema` | — | схема формы (см. ниже) | `schema()` |
-| `GET /api/state` | — | `state` | `state()` |
-| `POST /api/tick` | — | `state` после кадра | `tick()` |
-| `POST /api/command/<name>` | — | `state`; **404** `{"error"}` для неизвестной команды | `execute(name)` |
-| `POST /api/params` | JSON `{поле: значение}` | `state` (ошибки — в `state.errors`) | `update_parameters()` |
-| `POST /api/preset/<name>` | — | `state`; **404** для неизвестного пресета | `apply_preset(name)` |
-| `GET /api/export.csv` | — | CSV-файл истории | `export_csv()` |
-| `GET /api/export.json` | — | JSON-отчёт эксперимента | `export_json()` |
+| GET | `/` | — (страница) | 200 HTML |
+| GET | `/api/schema` | `schema()` — поля формы, пресеты, версия | 200 |
+| GET | `/api/state` | `state()` | 200 |
+| POST | `/api/tick` | `tick()` — кадр анимации (если фаза `running`) | 200 |
+| POST | `/api/command/{start\|pause\|step\|reset}` | `execute(name)` | 200 |
+| POST | `/api/params` | `update_parameters(body)` | 200 |
+| POST | `/api/preset/{gas\|liquid\|solid}` | `apply_preset(name)` | 200 |
+| POST | `/api/experiment` | `load_experiment(body)` — повтор из JSON | 200 |
+| GET | `/api/export.csv` | `export_csv()` | 200 text/csv |
+| GET | `/api/export.json` | `export_json()` | 200 application/json |
 
-Команды: `start`, `pause`, `step`, `reset`. Недоступная в данный момент
-команда (например, `start` во время работы) не выполняется, ответ — обычный
-`state`; доступность кнопок View берёт из `state.can`.
+Тело успешного ответа на все POST и `GET /api/state` — объект **state** (ниже).
 
-Пресеты: `gas`, `liquid`, `solid`.
-
-## Ошибки ввода
-
-Неверный ввод — не HTTP-ошибка, а часть состояния: ответ `200`, в
-`state.errors` — сообщения по полям, в `state.status` — `kind: "error"`.
-Симуляция при этом не пересоздаётся. Десятичная запятая принимается.
-
-```http
-POST /api/params
-Content-Type: application/json
-
-{"density": "abc", "dt": "0,002"}
-```
-```json
-{
-  "errors": {"density": "Введите число"},
-  "status": {"text": "Исправьте выделенные поля", "kind": "error"},
-  "...": "остальные поля state"
-}
-```
-
-Проверки: типы и диапазоны полей (по схеме), затем физическая
-согласованность в ядре (`SimulationParameters.validate`, например
-r<sub>c</sub> ≤ L/2 при PBC). Тело, не являющееся JSON, игнорируется.
-
-Численная неустойчивость («взрыв» системы) тоже не ломает API:
-`status.kind = "error"`, `frame = null`, доступна только команда `reset`.
-
-## Формат `state`
+## Ошибки
 
 ```json
+{"error": {"code": "validation_failed", "message": "Исправьте выделенные поля"},
+ "state": { ... }}
+```
+
+`state` присутствует, если запрос дошёл до ViewModel (интерфейс сразу
+показывает ошибки у полей и актуальную фазу).
+
+| HTTP | code | Когда |
+|---|---|---|
+| 400 | `bad_request` | тело не JSON или не объект |
+| 400 | `bad_format` | файл эксперимента не соответствует схеме (версия, лишние/недостающие параметры) |
+| 404 | `unknown_command`, `unknown_preset`, `not_found` | неизвестное имя или маршрут |
+| 405 | `method_not_allowed` | неверный метод |
+| 409 | `command_unavailable` | команда недоступна в текущей фазе (например, `start` в `running`) |
+| 413 | `too_large` | тело больше 64 КБ |
+| 422 | `validation_failed` | значения разобраны, но не прошли проверку; подробности в `state.errors` |
+| 500 | `internal_error` | непредвиденная ошибка сервера (пишется в журнал) |
+
+## Объект state
+
+```jsonc
 {
+  "phase": "idle" | "running" | "paused" | "completed" | "failed",
   "is_running": false,
-  "status": {"text": "Готово к запуску", "kind": "info"},
+  "status": {"text": "Готово к запуску", "kind": "info" | "error"},
   "can": {"start": true, "pause": false, "step": true, "reset": true},
-  "params": {"n_particles": 64, "dim": 2, "density": 0.5, "initial_temperature": 1.0,
-             "dt": 0.005, "cutoff": 2.5, "boundary": "periodic", "thermostat": "none",
-             "target_temperature": 1.0, "tau": 0.5, "seed": 42, "steps_per_frame": 10},
-  "errors": {},
-  "display": {"step": "0", "time": "0.000", "temperature": "1.0000",
-              "kinetic_per_atom": "…", "potential_per_atom": "…", "total_per_atom": "…",
-              "pressure": "…", "energy_drift": "+0.000 %", "box": "11.314",
-              "density": "0.500", "n": "64"},
-  "frame": {"dim": 2, "box": 11.314, "boundary": "periodic",
-            "positions": [[0.7, 0.7], "…"], "speeds": [1.21, "…"]},
-  "rdf": {"r": ["…"], "g": ["…"], "samples": 0},
-  "series": {"time": [], "kinetic": [], "potential": [], "total": [],
-             "temperature": [], "pressure": []}
+  "params": {                       // текущие применённые параметры
+    "n_particles": 64, "dim": 2, "density": 0.5, "initial_temperature": 1.0,
+    "dt": 0.005, "cutoff": 2.5, "boundary": "periodic" | "reflective",
+    "thermostat": "none" | "berendsen" | "rescale", "target_temperature": 1.0,
+    "tau": 0.5, "seed": 42, "t_max": 0.0, "steps_per_frame": 10
+  },
+  "errors": {"dt": "Шаг: 0 < dt ≤ 0.02 (иначе схема неустойчива)"},   // по полям
+  "display": {                      // готовые к показу строки, View ничего не форматирует
+    "phase", "step", "time", "progress", "temperature", "temperature_si", "time_si",
+    "kinetic_per_atom", "potential_per_atom", "total_per_atom", "pressure",
+    "pressure_si", "pressure_wall", "energy_drift", "box", "density", "n",
+    "steps_per_frame"
+  },
+  "frame": {"dim": 2, "box": 11.31, "boundary": "periodic",
+            "positions": [[x, y], ...], "speeds": [v, ...]},
+  "rdf": {"r": [...], "g": [...], "samples": 12},
+  "series": {"time": [...], "kinetic": [...], "potential": [...], "total": [...],
+             "temperature": [...], "pressure": [...]}   // ≤ ~400 точек, энергии на атом
 }
 ```
 
-- `display` — уже отформатированные строки: View выводит их как есть.
-- `series` — ряды для графиков, энергии на атом, не более 400 точек.
-- `rdf` — g(r), усреднённая по времени с момента последнего изменения параметров.
+Все числа конечные (строгий JSON без `NaN`/`Infinity`): при численном сбое
+система откатывается к последнему устойчивому состоянию, фаза — `failed`.
 
-## Схема формы (`/api/schema`)
+## Тело `POST /api/params`
 
-```json
+Любое подмножество полей `params`; значения — числа или строки
+(допускается десятичная запятая). Проверяются **все** поля до применения;
+при ошибке не меняется ничего. Поля с `live: true` в схеме (`thermostat`,
+`target_temperature`, `tau`, `t_max`, `steps_per_frame`) применяются без
+пересоздания системы, остальные пересоздают её (фаза `idle`).
+
+## Файл эксперимента (`export.json`, `POST /api/experiment`)
+
+```jsonc
 {
-  "fields": [{"name": "density", "label": "Плотность ρ", "kind": "float",
-              "min": 0.01, "max": 1.2, "step": 0.01, "live": false,
-              "hint": "ρ = N / V, задаёт размер ячейки L", "options": []}, "…"],
-  "presets": [{"name": "gas", "label": "Газ"}, "…"]
+  "app": "lj_md", "app_version": "1.1.0", "schema_version": 1,
+  "exported_at": "2026-10-27T12:00:00+00:00",
+  "units": "...", "potential": "...", "integrator": "velocity Verlet",
+  "parameters": { ...все поля params... },
+  "termination": {"phase": "completed", "reason": "t_max_reached" | "numerical_instability"
+                  | "stopped_by_user_or_in_progress", "message": null, "steps": 600, "time": 3.0},
+  "summary": {"final": {...Snapshot...}, "pressure_wall": null, "energy_reference": -69.8},
+  "history": {"columns": ["step", "time_tau", "E_kin_eps", "E_pot_eps", "E_total_eps",
+                          "T_eps_per_kB", "P_virial_reduced"], "rows": [[...], ...]},
+  "rdf": {"r": [...], "g": [...], "samples": 60}
 }
 ```
 
-`kind`: `int`, `float`, `choice` (варианты — в `options`). Поля с
-`live: true` (термостат, скорость анимации) применяются без перезапуска.
+Для повтора эксперимента клиент отправляет только `schema_version` и
+`parameters`. Схема строгая: неизвестные и отсутствующие параметры — `400 bad_format`,
+недопустимые значения — `422`.
 
-## Экспорт
+## CSV (`export.csv`)
 
-**CSV** (`/api/export.csv`) — история наблюдаемых, полные (не на атом) величины:
+Строки `# ключ: значение` — метаданные (версия, единицы, все параметры,
+причина завершения), затем таблица в полной точности:
 
 ```
-step,time,kinetic,potential,total,temperature,pressure
-0,0.000000,63.00000000,-71.20000000,-8.20000000,1.00000000,0.61000000
+step,time_tau,E_kin_eps,E_pot_eps,E_total_eps,T_eps_per_kB,P_virial_reduced
 ```
 
-**JSON** (`/api/export.json`) — отчёт, по которому эксперимент можно
-воспроизвести (одинаковые параметры и `seed` дают одинаковую траекторию):
-
-```json
-{
-  "format": "lj_md-report/1",
-  "units": "reduced LJ: sigma = epsilon = m = k_B = 1",
-  "parameters": {"…": "как state.params"},
-  "status": {"text": "…", "kind": "info"},
-  "summary": {"…": "как state.display"},
-  "history": [{"step": 0, "time": 0.0, "kinetic": 63.0, "potential": -71.2,
-               "total": -8.2, "temperature": 1.0, "pressure": 0.61}],
-  "rdf": {"r": [], "g": [], "samples": 0}
-}
-```
-
-Контракт проверяется тестами `tests/test_viewmodel.py::test_state_contract`
-и `tests/test_web.py`.
+Чтение: `pandas.read_csv("lj_md_history.csv", comment="#")`.
